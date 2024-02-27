@@ -1,0 +1,11 @@
+{
+    "domain": "sunergy_optimizer",
+    "name": "Solar Power Generation Optimizer",
+    "codeowners": [],
+    "dependencies": [],
+    "documentation": "https://github.com/sousa-dev/sunergy_optimizer/blob/main/README.md",
+    "iot_class": "local_polling",
+    "requirements": [],
+    "version": "0.1.0"
+  }
+  
