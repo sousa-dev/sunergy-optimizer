@@ -16,12 +16,12 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-async def initialize(hass):
+async def initialize(history_data):
     now = datetime.datetime.now()
-    total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(hass, now - datetime.timedelta(days=15), now)
+    total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
     return f'{DOMAIN}.Hello_World', f'Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Updated at: {now}'
 
-async def fetch_historical_data(hass, entity_id, start_time, end_time=None):
+async def get_fetch_url(entity_id, start_time=datetime.datetime.now() - datetime.timedelta(days=15), end_time=datetime.datetime.now()):
     """Fetch historical data for an entity from Home Assistant's REST API."""
     # Construct the URL for the history API endpoint
     start_time_str = start_time.isoformat().replace('+00:00', 'Z')
@@ -31,22 +31,11 @@ async def fetch_historical_data(hass, entity_id, start_time, end_time=None):
         url += f"?end_time={end_time_str}"
     url += f"&filter_entity_id={entity_id}"
 
-    # Log the url
-    _LOGGER.info(f"Fetching historical data from {url}")
+    return url
 
-    session = async_get_clientsession(hass)
-    async with session.get(url, headers=HEADERS) as response:
-        if response.status == 200:
-            history_data = await response.json()
-            return history_data
-        else:
-            _LOGGER.error(f"Failed to fetch historical data for {entity_id}. Status code: {response.status}")
-            return None
-
-async def calc_total_energy_generated(hass, start_time, end_time):
+async def calc_total_energy_generated(history_data, end_time=datetime.datetime.now()):
     """Calculate the total solar PV generation in the last week and day."""
-    entity_id = 'input_number.solar_pv_generation'
-    history_data = await fetch_historical_data(hass, entity_id, start_time, end_time)
+
     if not history_data:
         return 'N/A', 'N/A'  # No data or an error occurred
 
@@ -81,6 +70,23 @@ async def calc_total_energy_generated(hass, start_time, end_time):
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the sunergy_optimizer component."""
+
+    async def fetch_historical_data(entity_id, start_time=datetime.datetime.now(), time_delta=15):
+        start_time = datetime.datetime.fromisoformat(str(start_time).replace('Z', '+00:00'))
+        end_time = start_time - datetime.timedelta(minutes=time_delta)
+        url = await get_fetch_url(entity_id, start_time, end_time)
+
+        # Log the url
+        _LOGGER.info(f"Fetching historical data from {url}")
+
+        session = async_get_clientsession(hass)
+        async with session.get(url, headers=HEADERS) as response:
+            if response.status == 200:
+                history_data = await response.json()
+                return history_data
+            else:
+                _LOGGER.error(f"Failed to fetch historical data for {entity_id}. Status code: {response.status}")
+                return None
        
     async def update_state(now):
         """Update the state every minute and query history."""
@@ -95,10 +101,32 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         )
 
     async def initial_update():
-        entity, update = await initialize(hass)
+        """Initial update to set the state."""
+        history_data = await fetch_historical_data('input_number.solar_pv_generation')
+
+        entity, update = await initialize(history_data)
         hass.states.async_set(entity, update)
 
     hass.async_create_task(initial_update())
     async_track_time_interval(hass, update_state, datetime.timedelta(minutes=15))
 
     return True
+
+async def main():
+    """Main entry point of the sunergy_optimizer integration."""
+    import aiohttp
+    url = await get_fetch_url('input_number.solar_pv_generation')
+    print(url)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=HEADERS) as response:
+            if response.status == 200:
+                history_data = await response.json()
+                print(await initialize(history_data))
+                return history_data
+            else:
+                print(f"Failed to fetch historical data. Status code: {response.status}")
+                return None
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
