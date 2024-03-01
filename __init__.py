@@ -56,7 +56,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         hass.states.async_set(entity, update)
 
     hass.async_create_task(initial_update())
-    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=1))
+    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=15))
 
     return True
 
