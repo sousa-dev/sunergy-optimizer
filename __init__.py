@@ -19,7 +19,7 @@ HEADERS = {
 async def initialize(history_data):
     now = datetime.datetime.now()
     total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
-    return f'{DOMAIN}.Hello_World', f'Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Updated at: {now}'
+    return f'{DOMAIN}.Hello_World', f'Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Initiated at: {now}'
 
 async def get_fetch_url(entity_id, start_time=datetime.datetime.now() - datetime.timedelta(days=15), end_time=datetime.datetime.now()):
     """Fetch historical data for an entity from Home Assistant's REST API."""
@@ -64,16 +64,16 @@ async def calc_total_energy_generated(history_data, end_time=datetime.datetime.n
             if last_changed_datetime > (end_time - datetime.timedelta(days=1)):
                 total_generation_last_day += float(value) if value or value != '' else 0
                 
-
     return total_generation_last_week, total_generation_last_day
+
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the sunergy_optimizer component."""
 
-    async def fetch_historical_data(entity_id, start_time=datetime.datetime.now(), time_delta=15):
-        start_time = datetime.datetime.fromisoformat(str(start_time).replace('Z', '+00:00'))
-        end_time = start_time - datetime.timedelta(minutes=time_delta)
+    async def fetch_historical_data(entity_id, end_time=datetime.datetime.fromisoformat(str(datetime.datetime.now()).replace('Z', '+00:00')), time_delta=15):
+        start_time = end_time - datetime.timedelta(days=time_delta)
+
         url = await get_fetch_url(entity_id, start_time, end_time)
 
         # Log the url
@@ -90,10 +90,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
        
     async def update_state(now):
         """Update the state every minute and query history."""
-        end_time = now
-        start_time = now - datetime.timedelta(days=15)
 
-        total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(start_time, end_time)
+        history_data = await fetch_historical_data('input_number.solar_pv_generation')
+
+        total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
         
         hass.states.async_set(
             f'{DOMAIN}.Hello_World',
@@ -108,7 +108,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         hass.states.async_set(entity, update)
 
     hass.async_create_task(initial_update())
-    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=15))
+    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=1))
 
     return True
 
