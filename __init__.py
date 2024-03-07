@@ -1,8 +1,10 @@
 import logging
 import datetime
+import asyncio
 
 from .const import DOMAIN, HEADERS
 from .utils import get_fetch_url, calc_total_energy_generated
+from .model import PVForecaster
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
@@ -13,8 +15,18 @@ _LOGGER = logging.getLogger(__name__)
 
 async def initialize(history_data):
     now = datetime.datetime.now()
+    now = now.astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
+
+    model = PVForecaster()
+    model.load_data(history_data)
+    model.preprocess_data()
+    model.train()
+
+    prediction = model.predict()
+
     total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
-    return f'{DOMAIN}.Hello_World', f'Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Initiated at: {now}'
+    
+    return f'{DOMAIN}.Hello_World', f'Prediction for the next 15min: {prediction} | Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Initiated at: {now}'
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the sunergy_optimizer component."""
@@ -38,24 +50,61 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
        
     async def update_state(now):
         """Update the state every minute and query history."""
+        # Convert to Azores Timezone
+        now = now.astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
 
         history_data = await fetch_historical_data('input_number.solar_pv_generation')
 
-        total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
-        
-        hass.states.async_set(
-            f'{DOMAIN}.Hello_World',
-            f'Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Updated at: {datetime.datetime.now()}'
-        )
+        model = PVForecaster()
+        model.load_data(history_data)
+        model.preprocess_data()
+        model.train()
 
-    async def initial_update():
+        prediction = model.predict()
+
+        actual_generation = model.data_15min.iloc[-1]['state']
+
+        total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
+
+        hass.states.async_set(f"{DOMAIN}.prediction", prediction, attributes={"unit_of_measurement": "kW", "friendly_name": "PV Prediction for next 15 minutes"})
+        hass.states.async_set(f"{DOMAIN}.generated_pv_15min", actual_generation, attributes={"unit_of_measurement": "kWh", "friendly_name": "Total Generation in last 15 minutes"})
+        hass.states.async_set(f"{DOMAIN}.total_generation_last_day", total_generation_last_day, attributes={"unit_of_measurement": "kWh", "friendly_name": "Total Generation Last Day"})
+        hass.states.async_set(f"{DOMAIN}.total_generation_last_week", total_generation_last_week, attributes={"unit_of_measurement": "kWh", "friendly_name": "Total Generation Last Week"})
+
+        
+        # Set the state to the primary prediction value
+        hass.states.async_set(
+            f'{DOMAIN}.solar_generation_prediction', prediction,
+            attributes={
+                "total_energy_last_day": total_generation_last_day,
+                "total_energy_last_week": total_generation_last_week,
+                "last_update": now.isoformat()
+            }
+        )
+        next_update = now + datetime.timedelta(minutes=15)
+        next_update.replace(second=0, microsecond=0)
+        hass.states.async_set(f'{DOMAIN}.Hello_World', f'Prediction for the next 15min: {prediction} | Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Last update: {now} | Next update at {next_update}')
+
+
+    async def initial_update(first_update=0):
         """Initial update to set the state."""
         history_data = await fetch_historical_data('input_number.solar_pv_generation')
 
         entity, update = await initialize(history_data)
-        hass.states.async_set(entity, update)
+        hass.states.async_set(entity, update + f" | First update at {first_update}")
 
-    hass.async_create_task(initial_update())
+    # Calculate time left for HH:00; HH:15; HH:30; HH:45
+    # Azores Timezone
+    now = datetime.datetime.now().astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
+    minutes_left = 15 - (now.minute % 15)
+    if minutes_left == 15:
+        minutes_left = 0
+    _LOGGER.info(f"First update scheduled in {minutes_left}")
+
+    first_update = now + datetime.timedelta(minutes=minutes_left)
+    first_update.replace(second=0, microsecond=0)
+    hass.async_create_task(initial_update(first_update=now + datetime.timedelta(minutes=minutes_left)))
+    await asyncio.sleep(minutes_left * 60)
     async_track_time_interval(hass, update_state, datetime.timedelta(minutes=15))
 
     return True
@@ -64,7 +113,6 @@ async def main():
     """Main entry point of the sunergy_optimizer integration."""
     import aiohttp
     url = await get_fetch_url('input_number.solar_pv_generation')
-    print(url)
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=HEADERS) as response:
             if response.status == 200:
@@ -76,5 +124,4 @@ async def main():
                 return None
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
