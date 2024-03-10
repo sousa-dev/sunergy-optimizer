@@ -36,7 +36,7 @@ async def initialize(history_data):
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the sunergy_optimizer component."""
 
-    async def fetch_historical_data(entity_id, end_time=datetime.datetime.fromisoformat(str(datetime.datetime.now()).replace('Z', '+00:00')), time_delta=TIME_INTERVAL):
+    async def fetch_historical_data(entity_id, end_time=datetime.datetime.fromisoformat(str(datetime.datetime.now()).replace('Z', '+00:00')), time_delta=15):
         start_time = end_time - datetime.timedelta(days=time_delta)
 
         url = await get_fetch_url(entity_id, start_time, end_time)
@@ -58,7 +58,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         # Convert to Azores Timezone
         now = datetime.datetime.now().astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
 
-        history_data = await fetch_historical_data('input_number.solar_pv_generation')
+        history_data = await fetch_historical_data('input_number.solar_pv_generation', end_time=datetime.datetime.fromisoformat(str(now).replace('Z', '+00:00')))
 
         model = PVForecaster()
         model.load_data(history_data)

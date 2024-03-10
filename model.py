@@ -63,17 +63,11 @@ class PVForecaster:
         df_cv = cross_validation(self.model, initial='7 days', period='2 days', horizon='15 minutes')
         # Calculate performance metrics
         df_p = performance_metrics(df_cv)
-        # Print the performance metrics
-        print(df_p)
 
-        # Get the mean absolute percentage error (MAPE)
-        mape = df_p['mape'].mean()
-        smape = df_p['smape'].mean()
-        # Get the root mean squared error (RMSE)
-        rmse = df_p['rmse'].mean()
-        mdape = df_p['mdape'].mean()
-
-
+        mape = df_p['mape'].mean() if 'mape' in df_p.columns else np.nan
+        smape = df_p['smape'].mean() if 'smape' in df_p.columns else np.nan
+        rmse = df_p['rmse'].mean() if 'rmse' in df_p.columns else np.nan
+        mdape = df_p['mdape'].mean() if 'mdape' in df_p.columns else np.nan
 
         # Return the performance metrics
         return f"MAPE: {mape:.2f} | SMAPE: {smape:.2f} | RMSE: {rmse:.2f} | MDAPE: {mdape:.2f}"
