@@ -1,9 +1,13 @@
 import datetime
 import pandas as pd
 
-from .const import HA_URL
+try:
+    from .const import HA_URL
+except ImportError:
+    from const import HA_URL
 
-async def get_fetch_url(entity_id, start_time=datetime.datetime.now() - datetime.timedelta(hours=2), end_time=datetime.datetime.now()):
+
+async def get_fetch_url(entity_id, start_time=datetime.datetime.now() - datetime.timedelta(days=15), end_time=datetime.datetime.now()):
     """Fetch historical data for an entity from Home Assistant's REST API."""
     # Construct the URL for the history API endpoint
     start_time_str = start_time.isoformat().replace('+00:00', 'Z')

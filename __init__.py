@@ -2,9 +2,14 @@ import logging
 import datetime
 import asyncio
 
-from .const import DOMAIN, HEADERS
-from .utils import get_fetch_url, calc_total_energy_generated
-from .model import PVForecaster
+if __name__ == "__main__":
+    from const import DOMAIN, HEADERS, TIME_INTERVAL
+    from utils import get_fetch_url, calc_total_energy_generated
+    from model import PVForecaster
+else:
+    from .const import DOMAIN, HEADERS, TIME_INTERVAL
+    from .utils import get_fetch_url, calc_total_energy_generated
+    from .model import PVForecaster
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
@@ -31,7 +36,7 @@ async def initialize(history_data):
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the sunergy_optimizer component."""
 
-    async def fetch_historical_data(entity_id, end_time=datetime.datetime.fromisoformat(str(datetime.datetime.now()).replace('Z', '+00:00')), time_delta=15):
+    async def fetch_historical_data(entity_id, end_time=datetime.datetime.fromisoformat(str(datetime.datetime.now()).replace('Z', '+00:00')), time_delta=TIME_INTERVAL):
         start_time = end_time - datetime.timedelta(days=time_delta)
 
         url = await get_fetch_url(entity_id, start_time, end_time)
@@ -51,7 +56,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async def update_state(now):
         """Update the state every minute and query history."""
         # Convert to Azores Timezone
-        now = now.astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
+        now = datetime.datetime.now().astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
 
         history_data = await fetch_historical_data('input_number.solar_pv_generation')
 
@@ -62,7 +67,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
         prediction = model.predict()
 
-        actual_generation = model.data_15min.iloc[-1]['state']
+        evaluation = model.evaluate()
+
+        actual_generation = model.data_15min.iloc[-1]['y']
 
         total_generation_last_week, total_generation_last_day = await calc_total_energy_generated(history_data)
 
@@ -81,9 +88,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 "last_update": now.isoformat()
             }
         )
-        next_update = now + datetime.timedelta(minutes=15)
+        next_update = now + datetime.timedelta(minutes=TIME_INTERVAL)
         next_update.replace(second=0, microsecond=0)
-        hass.states.async_set(f'{DOMAIN}.Hello_World', f'Prediction for the next 15min: {prediction} | Total Energy from Last day: {total_generation_last_day} vs Last week: {total_generation_last_week} | Last update: {now} | Next update at {next_update}')
+        hass.states.async_set(f'{DOMAIN}.Hello_World', f'Prediction for the next 15min: {prediction} | Evaluation: {evaluation} |  Last update: {now}')
 
 
     async def initial_update(first_update=0):
@@ -96,16 +103,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # Calculate time left for HH:00; HH:15; HH:30; HH:45
     # Azores Timezone
     now = datetime.datetime.now().astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
-    minutes_left = 15 - (now.minute % 15)
-    if minutes_left == 15:
+    minutes_left = TIME_INTERVAL - (now.minute % TIME_INTERVAL)
+    if minutes_left == TIME_INTERVAL:
         minutes_left = 0
     _LOGGER.info(f"First update scheduled in {minutes_left}")
 
     first_update = now + datetime.timedelta(minutes=minutes_left)
     first_update.replace(second=0, microsecond=0)
-    hass.async_create_task(initial_update(first_update=now + datetime.timedelta(minutes=minutes_left)))
-    await asyncio.sleep(minutes_left * 60)
-    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=15))
+    hass.async_create_task(initial_update(first_update=now + datetime.timedelta(minutes=TIME_INTERVAL))) #TODO: Fix this
+
+    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=1))
 
     return True
 
@@ -120,7 +127,7 @@ async def main():
                 print(await initialize(history_data))
                 return history_data
             else:
-                print(f"Failed to fetch historical data. Status code: {response.status}")
+                print(f"Failed to fetch historical data. Status code: {response.status}. {response.text}")
                 return None
 
 if __name__ == "__main__":
