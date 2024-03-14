@@ -7,3 +7,5 @@ HEADERS = {
 }
 
 TIME_INTERVAL = 15
+
+LOCATION = None 

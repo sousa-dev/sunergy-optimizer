@@ -1,15 +1,22 @@
 import logging
 import datetime
 import asyncio
+import aiohttp
+
+from pyipma.api import IPMA_API
+from pyipma.location import Location
+
 
 if __name__ == "__main__":
-    from const import DOMAIN, HEADERS, TIME_INTERVAL
+    from const import DOMAIN, HEADERS, TIME_INTERVAL, LOCATION
     from utils import get_fetch_url, calc_total_energy_generated
     from model import PVForecaster
+    from weather import get_weather_data, fetch_ipma_api_data
 else:
-    from .const import DOMAIN, HEADERS, TIME_INTERVAL
+    from .const import DOMAIN, HEADERS, TIME_INTERVAL, LOCATION
     from .utils import get_fetch_url, calc_total_energy_generated
     from .model import PVForecaster
+    from .weather import get_weather_data, fetch_ipma_api_data
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
@@ -21,6 +28,8 @@ _LOGGER = logging.getLogger(__name__)
 async def initialize(history_data):
     now = datetime.datetime.now()
     now = now.astimezone(datetime.timezone(datetime.timedelta(hours=-1)))
+
+    weather_data = await fetch_ipma_api_data(37.7392,-25.6617)
 
     model = PVForecaster()
     model.load_data(history_data)
@@ -90,15 +99,26 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         )
         next_update = now + datetime.timedelta(minutes=TIME_INTERVAL)
         next_update.replace(second=0, microsecond=0)
-        hass.states.async_set(f'{DOMAIN}.Hello_World', f'Prediction for the next 15min: {prediction} | Evaluation: {evaluation} |  Last update: {now}')
+
+        weather_data = None #await fetch_ipma_api_data(hass.config.latitude, hass.config.longitude)
+        if weather_data:
+            _LOGGER.debug(f"Weather in Ponta Delgada: {weather_data['current_hour'].get('temperature')}")
+
+        hass.states.async_set(f'{DOMAIN}.Hello_World', f'Prediction for the next 15min: {prediction} | Evaluation: {evaluation} | {weather_data['current_hour'].get('temperature')} ')
 
 
     async def initial_update(first_update=0):
         """Initial update to set the state."""
+
         history_data = await fetch_historical_data('input_number.solar_pv_generation')
 
         entity, update = await initialize(history_data)
-        hass.states.async_set(entity, update + f" | First update at {first_update}")
+
+        weather_data = None #await fetch_ipma_api_data(hass.config.latitude, hass.config.longitude)
+        if weather_data:
+            _LOGGER.debug(f"Weather in Ponta Delgada: {weather_data['current_hour']}")
+
+        hass.states.async_set(entity, update + f" | First update at {first_update} | Weather Data: {weather_data['current_hour'].get('temperature')}")
 
     # Calculate time left for HH:00; HH:15; HH:30; HH:45
     # Azores Timezone
@@ -112,7 +132,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     first_update.replace(second=0, microsecond=0)
     hass.async_create_task(initial_update(first_update=now + datetime.timedelta(minutes=TIME_INTERVAL)))
 
-    async_track_time_interval(hass, update_state, datetime.timedelta(minutes=15))
+    async_track_time_interval(hass, update_state, datetime.timedelta(seconds=20))
 
     return True
 
