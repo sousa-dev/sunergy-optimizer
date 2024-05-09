@@ -1,0 +1,27 @@
+abstract: <p><em>This software is still in development.</em></p>
+authors:
+- affiliation: "Departamento de Electr\xF3nica, Telecomunica\xE7\xF5es e Inform\xE1\
+    tica, Universidade de Aveiro"
+  family-names: Henrique Sousa
+  orcid: 0000-0002-1903-5620
+- affiliation: "Departamento de Electr\xF3nica, Telecomunica\xE7\xF5es e Inform\xE1\
+    tica, Universidade de Aveiro"
+  family-names: "Rafael Gon\xE7alves"
+  orcid: 0009-0002-8628-8262
+- affiliation: "Departamento de Electr\xF3nica, Telecomunica\xE7\xF5es e Inform\xE1\
+    tica, Universidade de Aveiro"
+  family-names: "M\xE1rio Antunes"
+  orcid: 0000-0002-6504-9441
+- affiliation: "Departamento de Electr\xF3nica, Telecomunica\xE7\xF5es e Inform\xE1\
+    tica, Universidade de Aveiro"
+  family-names: Diogo Gomes
+  orcid: 0000-0002-5848-2802
+cff-version: 1.2.0
+date-released: '2024-05-08'
+doi: 10.5281/zenodo.11155355
+license:
+- cc-by-4.0
+repository-code: https://github.com/sousa-dev/sunergy-optimizer
+title: 'sousa-dev/sunergy-optimizer'
+type: software
+version: '0.0'
